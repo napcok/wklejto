@@ -6,8 +6,9 @@ Stworzony na bazie SUSE Paste Script.
 ##Przykłady
 Wklejanie wyniku polecenia:
 
-`uname -a | wklejto`
+	uname -a | wklejto
 
-Wklejanie zawartości pliku
+Wklejanie zawartości pliku:
 
-`wklejto /etc/resolv.conf`
+	wklejto /etc/resolv.conf
+
