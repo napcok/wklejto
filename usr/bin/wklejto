@@ -1,0 +1,135 @@
+#!/bin/sh
+
+ ##############################################################################
+ #                                                                            #
+ # Wklejto.org paste script                                                   #
+ #                                                                            #
+ # Copyright (C) 2015 by Daniel Napora <napcok@gmail.com>                     #
+ #                                                                            #
+ # Based on SUSE Paste script                                                 #
+ # Copyright (C) 2007-2010 by Michal Hrusecky <Michal@Hrusecky.net>           #
+ #                                                                            #
+ # This program is free software: you can redistribute it and/or modify       #
+ # it under the terms of the GNU General Public License as published by       #
+ # the Free Software Foundation, either version 3 of the License, or          #
+ # (at your option) any later version.                                        #
+ #                                                                            #
+ # This program is distributed in the hope that it will be useful,            #
+ # but WITHOUT ANY WARRANTY; without even the implied warranty of             #
+ # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              #
+ # GNU General Public License for more details.                               #
+ #                                                                            #
+ # You should have received a copy of the GNU General Public License          #
+ # along with this program.  If not, see <http://www.gnu.org/licenses/>.      #
+ #                                                                            #
+ ##############################################################################
+
+# By default paste code from stdin
+
+INPUT="<-"
+TYPE="text"
+API_KEY=""
+
+# Read configuration file
+
+[ -r ~/.config/.wklejto ] && . ~/.config/.wklejto
+
+# Process the command line parameters
+
+while [ "$2" ]; do
+	case "x$1" in
+	"x-t" )
+		TITLE="$2"
+		shift 2 ;;
+	"x-n" )
+		NICK="$2"
+		shift 2 ;;
+	"x-f" )
+		SYNTAX="$2"
+		if [ "$SYNTAX" = "image" ]; then
+			TYPE="file"
+		else
+			TYPE="text"
+		fi
+		shift 2 ;;
+	"x-e" )
+		EXPIRE="$2"
+		shift 2 ;;
+	"x-k" )
+		KEY="$2"
+		shift 2 ;;
+	* )
+		echo "Wklejto.org skrypt wklejek"
+		echo ""
+		echo " użycie:"
+		echo "   wklejto [-f format] [-n nick] [-t title] [-e expire] [file]"
+		echo ""
+		exit 0 ;;
+	esac
+done
+
+# Key handling
+
+if [ "$KEY" ]; then
+	if [ "`expr substr "$KEY" 1 4`" = "KEY:" ]; then
+		KEY="`echo "$KEY" | sed 's|^KEY:||'`"
+	fi
+	API_KEY=" -F api_key=$KEY "
+fi
+
+# Do we want to use stdin or paste content of the file?
+
+if [ -r "$1" ]; then
+	INPUT="<$1"
+	[ "$TITLE" ] || TITLE="`basename $1`"
+	TMP=""
+	for i in /usr/share/wklejto/lang-mappings.sed \
+		~/.wklejto_lang_mappings.sed; do
+		[ -r "$i" ] && TMP="`LANG=C file -iLb "$1" | sed -nf "$i"`"
+	done
+	if [ "$TMP" ] && [ -z "$SYNTAX" ]; then
+		SYNTAX="$TMP"
+	fi
+	if [ "$SYNTAX" = "image" ]; then
+		INPUT="@$1"
+		TYPE="file"
+	else
+		TYPE="text"
+	fi
+fi
+
+# Defaults if nothing was specified
+
+# Nickname displayed as an author
+[ "$NICK"     ] || NICK="`whoami`"
+# Title of your paste
+[ "$TITLE"    ] || TITLE="`whoami` - wklejka"
+# Syntax highlighting (for possible values check the documentation)
+[ "$SYNTAX"   ] || SYNTAX="text"
+# Time to live for your paste in minutes (for possible values check the documentation)
+[ "$EXPIRE"   ] || EXPIRE=60
+
+
+# Real pasting and getting back the URL of the paste
+        
+URL="`
+curl -v -F "$TYPE=$INPUT" -F "title=$TITLE"  -F "expire=$EXPIRE"   \
+        -F "name=$NICK"   -F "lang=$SYNTAX"     \
+	$API_KEY                                                   \
+        http://wklejto.org/api/create 2>&1 | sed -n 's|<\ Location:\ ||p' `"
+
+
+# Check the results and inform the user
+
+if expr "$URL" : "^http://wklejto.org/w/[0-9a-f]\+" > /dev/null; then
+	ID="`echo "$URL" | sed 's|^http://wklejto.org/w/\([0-9a-f]\+\)[^0-9a-f]*|\1|'`"
+	echo "Dodane jako:"
+	echo "   http://wklejto.org/w/$ID"
+	
+	if [ -x /usr/bin/xclip ]; then
+		echo "http://wklejto.org/w/$ID" | xclip -selection XA_CLIPBOARD
+		echo "Link został skopiowany do schowka."
+	fi
+else
+	echo "Wklejanie nie powiodło się :-("
+fi
